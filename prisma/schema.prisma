@@ -1,0 +1,56 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  fullName  String
+  noWA      String
+  password  String
+  image     String?
+  role      String
+  startDate DateTime @default(now())
+  berita    Berita[]
+}
+
+model Berita {
+  id           String    @id @default(uuid())
+  thumbnail    String
+  shortDesc    String
+  content      String
+  updateDate   DateTime  @default(now())
+  status       String
+  typePriority String
+  hastag       String
+  user         User      @relation(fields: [idUser], references: [id])
+  idUser       String
+  category     Category  @relation(fields: [idCategory], references: [id])
+  idCategory   String
+  visitors     Visitor[]
+}
+
+model Visitor {
+  id         String  @id @default(uuid())
+  ipVisitors String
+  berita     Berita  @relation(fields: [idBerita], references: [id])
+  idBerita   String
+}
+
+model Category {
+  id           String   @id @default(uuid())
+  categoryName String
+  berita       Berita[]
+}

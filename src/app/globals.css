@@ -17,5 +17,19 @@
 body {
   color: var(--foreground);
   background: var(--background);
+  margin: 0;
+  padding: 0;
   font-family: Arial, Helvetica, sans-serif;
+  @apply bg-white text-gray-800;
+}
+.bg-reverse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url('/bg2.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: scaleX(-1); /* Membalik secara horizontal */
+  z-index: -1;
 }
