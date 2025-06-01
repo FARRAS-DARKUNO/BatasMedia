@@ -37,6 +37,7 @@ export const POST = withAuth(async (req: NextRequest) => {
       noWA,
       password: hashed,
       role,
+      image,
       startDate: new Date()
     }
   });

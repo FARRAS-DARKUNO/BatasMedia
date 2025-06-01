@@ -3,17 +3,51 @@ import { prisma } from '@/lib/prisma';
 import { withAuth } from '@/lib/api-auth';
 import { ADMIN, SUPERADMIN } from '@/data/type';
 
-// GET - List berita
-export const GET = withAuth(async () => {
-  const berita = await prisma.berita.findMany({
-    include: {
-      user: { select: { id: true, username: true } },
-      category: { select: { id: true, categoryName: true } },
-    },
-    orderBy: { updateDate: 'desc' },
+export const GET = withAuth(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '15');
+  const skip = (page - 1) * limit;
+
+  const status = searchParams.get('status'); // contoh: "Approved"
+  const titleQuery = searchParams.get('title'); // contoh: "Pemilu"
+
+  const whereClause: any = {};
+
+  if (status) {
+    whereClause.status = status;
+  }
+
+  if (titleQuery) {
+    whereClause.title = {
+      contains: titleQuery,
+      mode: 'insensitive', // agar pencarian tidak case-sensitive
+    };
+  }
+
+  const [berita, total] = await Promise.all([
+    prisma.berita.findMany({
+      skip,
+      take: limit,
+      where: whereClause,
+      include: {
+        user: { select: { id: true, username: true } },
+        category: { select: { id: true, categoryName: true } },
+      },
+      orderBy: { updateDate: 'desc' },
+    }),
+    prisma.berita.count({ where: whereClause }),
+  ]);
+
+  return NextResponse.json({
+    data: berita,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
   });
-  return NextResponse.json(berita);
 }, [SUPERADMIN, ADMIN]);
+
 
 // POST - Create berita
 export const POST = withAuth(async (req: NextRequest) => {
@@ -26,7 +60,9 @@ export const POST = withAuth(async (req: NextRequest) => {
     typePriority,
     hastag,
     idUser,
+    feedback,
     idCategory,
+    title,
   } = body;
 
   const berita = await prisma.berita.create({
@@ -38,7 +74,9 @@ export const POST = withAuth(async (req: NextRequest) => {
       typePriority,
       hastag,
       idUser,
+      feedback,
       idCategory,
+      title
     },
   });
 

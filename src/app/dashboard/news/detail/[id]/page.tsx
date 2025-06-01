@@ -1,139 +1,287 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import MTC from '@/components/MTC';
+import { APPROVE, PENDING, REJECT, REVISED, TOAPPROVE } from '@/data/type';
+import { useRouter } from "next/navigation";
 
-const JoditEditor = dynamic(() => import('jodit-react'), { ssr: false });
 
-const categories = ['Politik', 'Teknologi', 'Olahraga', 'Hiburan', 'Ekonomi'];
+type NewsStatus =  typeof PENDING | typeof REVISED | typeof REJECT | typeof APPROVE | typeof TOAPPROVE;
 
-type NewsStatus = 'To Approve' | 'Pending' | 'Revisi' | 'Reject' | 'Approved';
-
-interface NewsDetailProps {
-  status: NewsStatus;
-  initialData: {
-    title: string;
-    hashtags: string[];
-    shortDesc: string;
-    category: string;
-    content: string;
-  };
-  onSubmitEdit?: (data: any) => void;
-  onApprove?: (note: string) => void;
-  onReject?: (note: string) => void;
-}
-
-export default function NewsDetailForm() {
-  const [title, setTitle] = useState("id");
-  const [hashtags, setHashtags] = useState("dadsa,deffdf,afea,fafae");
-  const [shortDesc, setShortDesc] = useState("apa lah ini ");
-  const [category, setCategory] = useState("makan");
-  const [status, Setstatus] = useState("To ss");
-  const editor = useRef(null);
-  const [content, setContent] = useState("banyak");
-  const [note, setNote] = useState('');
-
+export default function NewsDetailPage() {
   const params = useParams();
-  const id = params?.id;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = params?.id as string;
 
-  const isEditable = status === 'Revisi';
-  const isToApprove = status === 'To Approve';
+  const [title, setTitle] = useState('');
+  const [hashtags, setHashtags] = useState('');
+  const [shortDesc, setShortDesc] = useState('');
+  const [content, setContent] = useState('');
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState('');
+  const [note, setNote] = useState('');
+  const [categories, setCategories] = useState<{ id: string, categoryName: string }[]>([]);
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const [isEditable, setisEditable] = useState<boolean>(false);
+  const [isToApprove, setisToApprove] = useState<boolean>(false);
+
+
+  // Ambil status dari query param jika ada
+  useEffect(() => {
+    const statusParam = searchParams.get('status') as NewsStatus | null;
+    if (statusParam) {
+      if(statusParam === REVISED){
+        setisEditable(true)
+      }
+      if(statusParam === TOAPPROVE){
+        setisToApprove(true)
+      }
+    }
+  }, [searchParams]);
+
+  // Fetch berita by ID dan kategori
+  useEffect(() => {
+    const fetchDetail = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/news/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }
+        });
+        if (!res.ok) throw new Error('Gagal fetch detail');
+        const data = await res.json();
+        setTitle(data.title);
+        setHashtags(data.hastag || '');
+        setShortDesc(data.shortDesc);
+        setContent(data.content);
+        setThumbnail(data.thumbnail);
+        // setStatus(data.status);
+        setCategory(data.idCategory || '');
+        setPriority(data.typePriority || '');
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    const fetchCategories = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/category`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }
+        });
+        if (!res.ok) throw new Error('Gagal fetch kategori');
+        const data = await res.json();
+        setCategories(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    if (id) {
+      fetchDetail();
+      fetchCategories();
+    }
+  }, [id]);
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // onSubmitEdit?.({status});
+  
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error("Token tidak ditemukan");
+  
+      const res = await fetch(`/api/news/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title,
+          hastag: hashtags,
+          shortDesc,
+          content,
+          thumbnail,
+          typePriority: priority,
+          idCategory: category,
+          status: PENDING, // atau REVISED tergantung logikamu
+          updateDate: new Date().toISOString(), // opsional jika backend handle otomatis
+        }),
+      });
+  
+      if (!res.ok) {
+        throw new Error("Gagal mengirim revisi berita");
+      }
+  
+      alert("Berita berhasil direvisi!");
+      router.push("/dashboard/news/task");
+    } catch (error) {
+      console.error("Error saat submit revisi:", error);
+      alert("Terjadi kesalahan saat submit revisi.");
+    }
+  };
+
+  const handleSubmit = async (status: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/news/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          status: status,
+          feedback: note
+        }),
+      });
+  
+      if (!res.ok) {
+        throw new Error('Gagal update status berita');
+      }
+  
+      router.push("/dashboard/news/task");
+
+      alert(`Berita Sukses di ${status}!`);
+  
+      // Opsional: arahkan ke halaman lain setelah berhasil
+      // router.push('/admin/news'); atau tampilkan notifikasi sukses
+    } catch (error) {
+      console.error('Error saat update status:', error);
+      // Tampilkan notifikasi error ke pengguna jika perlu
+    }
   };
 
   return (
-    <div className="mx-auto px-6 py-8 bg-white rounded-xl shadow-lg ring-1 ring-gray-200">
+    <div className="w-full mx-auto px-6 py-8 bg-white rounded-xl shadow-lg ring-1 ring-gray-200">
       <h3 className="text-xl font-extrabold mb-8 text-gray-900 tracking-tight">
         📰 Detail Berita
       </h3>
-      <form className="space-y-6" onSubmit={handleEditSubmit}>
-        <input
-          type="text"
-          placeholder="Judul"
-          disabled={!isEditable}
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
+      <form className="space-y-6" onSubmit={handleSubmitEdit}>
+        <MTC.Input.Field
+          title="Judul"
+          magic={{
+            type: "text",
+            inputValue: title,
+            setInputValue: setTitle,
+          }}
+          placeholder="Judul Berita"
+          disable={!isEditable}
         />
-        <input
-          type="text"
-          placeholder="Hashtag (pisahkan dengan koma)"
-          disabled={!isEditable}
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          value={hashtags}
-          onChange={e => setHashtags(e.target.value)}
-        />
-        <textarea
-          placeholder="Deskripsi singkat (max 50 karakter)"
-          disabled={!isEditable}
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm resize-none placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          rows={3}
-          maxLength={50}
-          value={shortDesc}
-          onChange={e => setShortDesc(e.target.value)}
-        />
-        <div>
-          <label className="block mb-2 font-semibold text-gray-700">Kategori</label>
-          <select
-            disabled={!isEditable}
-            className="w-full p-4 border border-gray-300 rounded-xl shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-          >
-            {categories.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block mb-2 font-semibold text-gray-700">Isi Berita</label>
-          <div className="rounded-xl border border-gray-300 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition">
-            <JoditEditor
-              ref={editor}
-              value={content}
-              onChange={newContent => setContent(newContent)}
-              config={{ readonly: !isEditable, height: 400, toolbarSticky: false, spellcheck: true }}
-            />
+
+        {thumbnail && (
+          <div className="w-full h-60 overflow-hidden rounded-lg border">
+            <img src={thumbnail} alt="Thumbnail" className="object-cover w-full h-full" />
           </div>
-        </div>
+        )}
+
+        <MTC.Input.Field
+          title="Hashtags"
+          magic={{
+            type: "text",
+            inputValue: hashtags,
+            setInputValue: setHashtags,
+          }}
+          placeholder="#DipisahkanDenganKoma"
+          disable={!isEditable}
+        />
+
+        <MTC.Input.Description
+          title="Deskripsi Singkat"
+          magic={{
+            inputValue: shortDesc,
+            setInputValue: setShortDesc,
+          }}
+          placeholder="Deskripsi (Max 50 Karakter)"
+          maxLength={50}
+          disable={!isEditable}
+        />
+
+        <MTC.Input.FieldDropDown
+          title="Kategori"
+          placeholder="Pilih kategori"
+          magic={{
+            type: 'select',
+            inputValue: category,
+            setInputValue: setCategory,
+            options: categories.map(c => ({
+              label: c.categoryName,
+              value: c.id,
+            })),
+            errorMessage: 'Kategori tidak valid',
+          }}
+          disable={!isEditable}
+        />
+
+        <MTC.Input.FieldDropDown
+          title="Prioritas"
+          placeholder="Pilih Prioritas"
+          magic={{
+            type: 'select',
+            inputValue: priority,
+            setInputValue: setPriority,
+            options: [
+              { label: '1', value: '1' },
+              { label: '2', value: '2' },
+              { label: '3', value: '3' },
+              { label: '4', value: '4' },
+              { label: '5', value: '5' },
+            ],
+            errorMessage: 'Prioritas tidak valid',
+          }}
+          disable={!isEditable}
+        />
+
+        <MTC.Input.WYSIWYGEditor
+          content={content}
+          setContent={setContent}
+          width="full"
+          spaceX={2}
+          spaceY={2}
+        />
 
         {isEditable && (
-          <button
-            type="submit"
-            className="w-auto py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-md transition-transform active:scale-95"
-          >
-            Submit Revisi
-          </button>
+          <MTC.Button.Normal title="Submit Revisi" buttonType="submit" />
         )}
 
         {isToApprove && (
           <div className="space-y-4">
             <textarea
               placeholder="Catatan (opsional)"
-              className="w-full p-4 border border-gray-300 rounded-xl shadow-sm resize-none placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full p-4 border border-gray-300 rounded-xl shadow-sm resize-none"
               rows={3}
               value={note}
-              onChange={e => setNote(e.target.value)}
+              onChange={(e) => setNote(e.target.value)}
             />
             <div className="flex gap-4">
               <button
                 type="button"
-                // onClick={() => onApprove?.(note)}
-                className="py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-md transition-transform active:scale-95"
+                onClick={() => handleSubmit(APPROVE)}
+                className="px-6 py-2 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition duration-200"
               >
                 Approve
               </button>
               <button
                 type="button"
-                // onClick={() => onReject?.(note)}
-                className="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl shadow-md transition-transform active:scale-95"
+                onClick={() => handleSubmit(REVISED)}
+                className="px-6 py-2 rounded-xl bg-yellow-600 text-white font-semibold hover:bg-red-700 transition duration-200"
+              >
+                Revition
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(REJECT)}
+                className="px-6 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition duration-200"
               >
                 Reject
               </button>
+              
             </div>
           </div>
         )}

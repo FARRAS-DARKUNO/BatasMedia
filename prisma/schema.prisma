@@ -29,10 +29,12 @@ model User {
 model Berita {
   id           String    @id @default(uuid())
   thumbnail    String
+  title        String?
   shortDesc    String
   content      String
   updateDate   DateTime  @default(now())
   status       String
+  feedback     String?
   typePriority String
   hastag       String
   user         User      @relation(fields: [idUser], references: [id])

@@ -1,12 +1,14 @@
 'use client';
 
 import MTC from '@/components/MTC';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { ADMIN, SUPERADMIN } from '@/data/type';
 
-export default function AddAdminPage() {
+export default function EditAdminPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = params?.id as string;
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -14,6 +16,42 @@ export default function AddAdminPage() {
   const [noWA, setNoWA] = useState('');
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [role, setRole] = useState(ADMIN);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Token tidak ditemukan');
+
+        const res = await fetch(`/api/auth/register/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error('Gagal mengambil data admin');
+        }
+
+        const data = await res.json();
+        setFullName(data.fullName || '');
+        setUsername(data.username || '');
+        setNoWA(data.noWA || '');
+        setPhotoBase64(data.image || null);
+        setRole(data.role || ADMIN);
+        setLoading(false);
+      } catch (error) {
+        console.error(error);
+        alert('Gagal memuat data admin');
+        router.push('/dashboard/admin');
+      }
+    };
+
+    if (id) {
+      fetchData();
+    }
+  }, [id, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,32 +63,32 @@ export default function AddAdminPage() {
       const data = {
         fullName,
         username,
-        password,
+        password: password || undefined, // kosong berarti tidak update password
         noWA,
         image: photoBase64,
         role,
       };
 
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
+      const res = await fetch(`/api/auth/register/${id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(data),
       });
 
       if (!res.ok) {
         const error = await res.json();
-        alert(error.message || 'Gagal menambahkan admin');
+        alert(error.message || 'Gagal mengedit admin');
         return;
       }
 
-      alert('Admin berhasil ditambahkan!');
+      alert('Admin berhasil diperbarui!');
       router.push('/dashboard/admin');
     } catch (err) {
       console.error('Submit error:', err);
-      alert('Gagal menambahkan admin');
+      alert('Gagal mengedit admin');
     }
   };
 
@@ -67,9 +105,11 @@ export default function AddAdminPage() {
     { label: 'Super Admin', value: SUPERADMIN },
   ];
 
+  if (loading) return <p className="text-center py-8">Loading...</p>;
+
   return (
     <div className="w-full mx-auto px-6 py-8 bg-white rounded-xl shadow-lg ring-1 ring-gray-200">
-      <h3 className="text-xl font-extrabold mb-8 text-gray-900 tracking-tight">👤 Tambah Admin</h3>
+      <h3 className="text-xl font-extrabold mb-8 text-gray-900 tracking-tight">✏️ Edit Admin</h3>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <MTC.Input.Field
@@ -96,16 +136,15 @@ export default function AddAdminPage() {
         />
         <MTC.Input.Field
           name="Password"
-          title="Password"
+          title="Password (biarkan kosong jika tidak diganti)"
           magic={{
             type: "password",
             inputValue: password,
             setInputValue: setPassword,
             errorMessage: "Password tidak valid",
-            regex: /^.{6,}$/, // minimal 6 karakter
+            regex: /^.{6,}$/,
           }}
           placeholder="Minimal 6 karakter"
-          required
         />
         <MTC.Input.Field
           name="Nomor WA"
@@ -141,7 +180,7 @@ export default function AddAdminPage() {
           }}
         />
         <MTC.Button.Normal
-          title="Tambah Admin"
+          title="Simpan Perubahan"
           buttonType="submit"
         />
       </form>

@@ -30,7 +30,9 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: { id:
     typePriority,
     hastag,
     idUser,
+    feedback,
     idCategory,
+    title,
   } = await req.json();
 
   const berita = await prisma.berita.update({
@@ -44,6 +46,8 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: { id:
       hastag,
       idUser,
       idCategory,
+      title,
+      feedback,
       updateDate: new Date(),
     },
   });

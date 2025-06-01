@@ -1,109 +1,210 @@
 'use client';
-import dynamic from 'next/dynamic';
-import { useState, useRef } from 'react';
-
-const categories = ['Politik', 'Teknologi', 'Olahraga', 'Hiburan', 'Ekonomi'];
-const JoditEditor = dynamic(() => import('jodit-react'), { ssr: false });
+import MTC from '@/components/MTC';
+import { useState, useRef, useEffect } from 'react';
+import {jwtDecode} from 'jwt-decode';
+import { JwtPayload } from '@/lib/auth';
+import { PENDING } from '@/data/type';
+import { useRouter } from "next/navigation";
 
 export default function CreateNewsPage() {
+
+  const router = useRouter();
+
+  interface Category {
+    id: string;
+    categoryName: string;
+  }
+
   const [title, setTitle] = useState('');
   const [hashtags, setHashtags] = useState('');
   const [shortDesc, setShortDesc] = useState('');
-  const [category, setCategory] = useState(categories[0]);
-  const editor = useRef(null);
-  const [content, setContent] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const data = {
-      title,
-      hashtags: hashtags.split(',').map(h => h.trim()).filter(Boolean),
-      shortDesc,
-      category,
-      content,
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedFileBase64, setSelectedFileBase64] = useState<string | null>(null);
+  const [priority, setPriority] = useState<string>('');
+
+  const levelOptions = [
+    { label: '1', value: '1' },
+    { label: '2', value: '2' },
+    { label: '3', value: '3' },
+    { label: '4', value: '4' },
+    { label: '5', value: '5' },
+  ];
+
+  const [content, setContent] = useState('')
+
+  const editor = useRef(null);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const token = localStorage.getItem('token'); // Ambil token dari localStorage
+        if (!token) throw new Error('Token tidak ditemukan');
+
+        const res = await fetch('/api/category', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) throw new Error('Gagal fetch kategori');
+        const data = await res.json();
+        setCategories(data);
+      } catch (err) {
+        console.error(err);
+      }
     };
-    console.log('Submit data:', data);
-    alert('Berita berhasil disubmit!');
+
+    fetchCategories();
+  }, []);
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+  
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Token tidak ditemukan');
+
+      const decoded = jwtDecode<JwtPayload>(token);
+  
+      const data = {
+        thumbnail: selectedFileBase64,
+        title,
+        shortDesc,
+        content,
+        updateDate: new Date().toISOString(),
+        status: PENDING, // default status misalnya
+        typePriority: priority,
+        hastag: hashtags,
+        idUser: decoded.userId, // ganti dengan user ID jika bisa didapat dari token
+        idCategory: selectedCategoryId,
+      };
+      const res = await fetch('/api/news/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+  
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(errorData.message);
+        throw new Error(errorData.message || 'Gagal mengirim berita');
+      }
+  
+      router.push("/dashboard/news/task");
+
+      alert('Berita Sukses disubmit!');
+    } catch (error) {
+      console.error('Submit error:', error);
+      if (error instanceof Error) {
+        alert('Gagal kirim berita: ' + error.message);
+      } else {
+        alert('Gagal kirim berita: Unknown error');
+      }
+    }
+  };
+
+  const setSelectedFileUnion = (value: string | File | null) => {
+    if (typeof value === 'string' || value === null) {
+      setSelectedFileBase64(value); // Hanya terima string (Base64) atau null
+    } else {
+      console.warn('File object received, but expected base64 string');
+    }
   };
 
   return (
-    <div className=" mx-auto px-6 py-8 bg-white rounded-xl shadow-lg ring-1 ring-gray-200">
+    <div className="w-full mx-auto px-6 py-8 bg-white rounded-xl shadow-lg ring-1 ring-gray-200">
       <h3 className="text-xl font-extrabold mb-8 text-gray-900 tracking-tight">
         📝 Buat Berita
       </h3>
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Judul"
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
+        <MTC.Input.Field
+          name='Judul Berita'
+          title='Judul Berita'
+          maxLength={30}
+          magic={{
+            type: "text",
+            inputValue: title,
+            setInputValue: setTitle,
+          }}
+          placeholder='Judul Berita (Max 30 Character)'
           required
         />
-        <input
-          type="text"
-          placeholder="Hashtag (pisahkan dengan koma)"
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          value={hashtags}
-          onChange={e => setHashtags(e.target.value)}
+        <MTC.Input.FileUploader
+          title="Thumbnail"
+          magic={{
+            accept: 'image/*',
+            selectedFile: selectedFileBase64,
+            setSelectedFile: setSelectedFileUnion,
+            isConvertBase64: true, // Konversi ke Base64
+          }}
         />
-        <textarea
-          placeholder="Deskripsi singkat (max 50 karakter)"
-          className="w-full p-4 border border-gray-300 rounded-xl shadow-sm resize-none placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          rows={3}
+        <MTC.Input.Field
+          name='Hastag'
+          title='Hastag'
+          magic={{
+            type: "text",
+            inputValue: hashtags,
+            setInputValue: setHashtags,
+          }}
+          placeholder='#DipisahkanDenganSpasi'
+          required
+        />
+        <MTC.Input.Description
+          name='Hastag'
+          title='Hastag'
+          magic={{
+            inputValue: shortDesc,
+            setInputValue: setShortDesc,
+          }}
+          placeholder='Description (Max 50 Character)'
           maxLength={50}
-          value={shortDesc}
-          onChange={e => setShortDesc(e.target.value)}
           required
         />
-        <div>
-          <label className="block mb-2 font-semibold text-gray-700">
-            Kategori
-          </label>
-          <select
-            className="w-full p-4 border border-gray-300 rounded-xl shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-          >
-            {categories.map(cat => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block mb-2 font-semibold text-gray-700">
-            Isi Berita
-          </label>
-          <div className="rounded-xl border border-gray-300 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition">
-            <JoditEditor
-              ref={editor}
-              value={content}
-              onChange={newContent => setContent(newContent)}
-              config={{
-                readonly: false,
-                height: 400,
-                toolbarSticky: false,
-                spellcheck: true,
-              }}
-            />
-          </div>
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">
-              Output HTML:
-            </h2>
-            <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 whitespace-pre-wrap break-words">
-              {content || <i className="text-gray-400">Belum ada isi...</i>}
-            </div>
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="w-auto py-2 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold rounded-2xl shadow-md transition-transform active:scale-95"
-        >
-          Submit
-        </button>
+        <MTC.Input.FieldDropDown
+          title="Kategori Berita"
+          placeholder="Pilih kategori"
+          magic={{
+            type: 'select',
+            inputValue: selectedCategoryId,
+            setInputValue: setSelectedCategoryId,
+            errorMessage: 'Kategori tidak valid',
+            options: categories.map((c) => ({
+              value: c.id,
+              label: c.categoryName,
+            })),
+          }}
+        />
+        <MTC.Input.FieldDropDown
+          title="Level Priority"
+          placeholder="Pilih Level"
+          name="priority"
+          magic={{
+            type: 'select',
+            inputValue: priority,
+            setInputValue: setPriority,
+            options: levelOptions,
+            errorMessage: 'Pilih level yang valid',
+          }}
+        />
+        <MTC.Input.WYSIWYGEditor
+          content={content}
+          setContent={setContent}
+          width="full"
+          spaceX={2}
+          spaceY={2}
+        />
+        <MTC.Button.Normal
+          title='Buat Berita'
+          buttonType='submit'
+        />
       </form>
     </div>
   );
